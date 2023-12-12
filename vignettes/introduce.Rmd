@@ -1,0 +1,67 @@
+---
+title: "Introduce bitmodeling"
+author: "Choonghyun Ryu"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduce bitmodeling}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r environment, echo = FALSE, message = FALSE, warning=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "", out.width = "600px", dpi = 70)
+options(tibble.print_min = 4L, tibble.print_max = 4L)
+```
+
+## 개요
+
+`bitmodeling`는 **Classification modeling** 분석 과정에서의 **EDA** 및 **모델 적합** 및 **성능 평가**를 지원하는 패키지입니다.
+
+Features:
+
+- tidymodels 패키지군을 지원합니다.
+- 변수 선택을 위한 세션을 지원하는 **EDA 자동화 보고서**를 제공합니다.
+    - 범주형 변수의 EDA 자동화 보고서
+    - 연속형 변수의 EDA 자동화 보고서
+- 수행 속도 개선을 위해 **병철처리(Parallel Processing)를 지원**합니다.
+- **표준화된 Classifiers**와 **Cross-Validation**, **Hyper parameters 튜닝**을 지원합니다.
+    - Logistic regression
+    - Ridge regression
+    - Lasoo regression
+    - Elastic Net regression
+    - Random Forest
+    - XGBoost
+- 최적 모델 선택을 위한 **분석 자동화 보고서**를 제공합니다.
+
+
+## EDA
+
+Tasks             | Descriptions                       | Functions | Support Parallel
+:-----------------|:-----------------------------------|:-----------------|:----------:
+범주형 변수의 EDA | 변수 선택을 위한 범주형 변수의 EDA | `eda_category()` | O
+연속형 변수의 EDA | 변수 선택을 위한 연속형 변수의 EDA | `eda_numeric()`  | O
+
+
+## Binary Classification
+
+Tasks                               | Descriptions                                                                    | Functions                 | Support Parallel
+:-----------------------------------|:--------------------------------------------------------------------------------|:--------------------------|:-----------------: Target 변수 지정                    | Machine learning 과정에서 Target 변수를 지정                                    | `target_to()`             | X
+Positive 클래스 지정                | Binary 클래스를 갖는 Target 변수에 Positive 클래스를 지정                       | `set_positive()`          | X
+target 변수 분포 출력               | 데이터셋 중 target 변수의 Positive와 Negative의 분포 출력                       | `target_table()`          | X
+데이터셋 분리를 위한 설정           | 데이터셋을 training 셋과 모델 평가를 위한 test 셋으로 분리하는 설정             | `split_dataset()`         | X
+데이터셋 추출                       | 모델 개발을 위한 training 셋이나 모델 평가를 위한 test 셋 추출                  | `extract_dataset()`       | X
+모델 메타 정의                      | parsnip 패키지를 이용해서, tidymodels 에코 시스템에서 사용할 모델 정의          | `get_classifier()`        | X
+수치 데이터의 정규화                | 평균이 0이 되도록 수치 변수를 정규화하는 레시피 스펙 정의                       | `step_my_center()`        | X
+범주형 데이터의 더미화              | 명목척도의 범주형 변수를 하나 이상의 이진항으로 변환하는 레시피 스펙 정의       | `step_my_dummy()`         | X
+ROSE 알고리즘 적용                  | ROSE 기반 합성 데이터 샘플을 생성하는 레시피 스펙을 정의                        | `step_my_rose()`          | X
+Classifiers 모델 적합               | recipe 클래스와 classifiers를 이용하여 Binary Classification 적합               | `get_training()`          | X
+모델 성능평가 정보 생성             | 생성한 모델에 대해서 성능 평가를 위한 통계 계산                                 | `info_model()`            | X
+모델 성능 시각화                    | 모델링 함수로 생성한 모델에 대해서 성능 평가를 위한 플롯을 시각화               | `viz_model()`             | X
+모델 성능 비교                      | multi_classifiers()로 생성한 여러 모델링의 성능 평가 통계를 계산                | `compare_info_model()`    | X
+Classifiers 모델 적합               | multi_classifiers()로 생성한 여러 모델링의 성능 평가 시각화                     | `compare_viz_model()`     | X
+Multi Classifiers 모델 적합         | 여러 개의 classifiers로 Binary Classification modeling을 수행                   | `multi_classifiers()`     | O
+Multi Recipes 모델 성능 보고서 생성 | 여러 개의 recipes로 Binary Classification modeling을 수행                       | `multi_recipes()`         | O
+모델 성능 보고서 생성               | 적합한 모델의 classifiers별로 성능 평가 결과를 Excel 파일로 생성                | `report_model()`          | X
+Multi Recipes 모델 성능 보고서 생성 | Multi recipes 모델의 개별 recipes에 대해서 classifiers별로 성능 평가 Excel 생성 | `report_model_recipes()`  | X
+

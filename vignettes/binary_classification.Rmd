@@ -1,0 +1,649 @@
+---
+title: "Binary classification with bitmodeling"
+author: "Choonghyun Ryu"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Binary classification with bitmodeling}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r environment, echo = FALSE, message = FALSE, warning=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "", out.width = "600px", dpi = 70)
+options(tibble.print_min = 4L, tibble.print_max = 4L)
+
+library(bitmodeling)
+library(dplyr)
+library(ggplot2)
+```
+
+## 개요
+
+tidymodels 프레임워크를 이용한 binary classification vignette를 통해서 레시피와 워크플오우의 개념을 충분히 이해하였을 것이라 생각합니다. 그리고 이런 데이터 분석 어프러치의 장점도 공감했을 것이라 기대합니다.
+
+그러나 tidymodels 프레임워크 초심자나 좀더 자동화 루틴화된 방법을 원하는 분석가를 위해서 bitmodeling 패키지에서 구현한 tidymodels 프레임워크 래핑 기반의 분석 방법을 소개합니다. 
+
+이 소개에서는 다음과 같은 방법을 다룹니다.
+
+* 손쉬운 레시피 정의하기
+* 대표적인 binary classifiers의 모델링
+* 여러 binary classifiers를 적용한 모델링
+* 복수개의 레시피에 여러 binary classifiers를 적용한 모델링
+* 모델링 결과에 대한 성능평가
+* 모델링 결과에 대한 성능평가 보고서 자동 생성
+
+
+## 손쉬운 레시피 정의하기
+
+파이프라인 처리 방법으로 레시피를 정의하는 방법을 다룹니다. tidymodels 프레임워크 방법보다 더 논리적입니다.
+
+binary classification 모델링을 수행했던 기존의 방법과 의사결정 체계를 이미지화하면, 이 방법에 좀 더 쉽게 적응할 수 있을 겁니다.
+
+
+### 데이터 소개
+
+`dlookr::heartfailure`는 심혈관 질환의 하나인 심부전으로 인한 사망을 예측하는데 사용할 수 있는 심부전 환자의 데이터셋입니다.  299건의 관측치와 다음과 같은 13개의 변수로 구성되어 있습니다.
+
+- age
+    - 환자의 나이
+- anaemia
+    - 변혈 여부. 적혈구 또는 헤모글로빈 감소
+    - Yes/No  
+- cpk_enzyme
+    - 혈중 CPK(creatinine phosphokinase) 효소의 수치 (mcg/L).
+- diabetes
+    - 당뇨병 여부
+    - Yes/No      
+- ejection_fraction
+    - 수축치 심장에서 나가는 혈액의 비율 (백분율)
+- hblood_pressure
+    - 고혈압 여부
+    - Yes/No     
+- platelets
+    - 혈액내 혈소판 수 (1,000/mL).
+- creatinine
+    - 혈중 크레아티닌 수치 (mg/dL).
+- sodium
+    - 혈중 나트륨 수치 (mEq/L).
+- sex
+    - 환자의 성별
+    - Male/Female
+- smoking
+    - 흡연 여부
+    - Yes/No       
+- time
+    - 후속 조치 기간 (일)
+- death_event
+    - 추적 기간동안의 환자의 사망여부
+    - Yes/No 
+
+tidymodels 패키지를 이용해서, `dlookr::heartfailure`로 심부전 환자에 대한 사망 여부를 예측하는 Binary Classification 모델을 개발할 것입니다.
+
+
+### target 변수 선정하기
+
+자, binary classification 모델링을 위한 데이터셋이 주어졌습니다. 우리는 제일 먼저 target 변수를 정의합니다.
+
+`target_to()` 함수로 데이터셋에서 타겟 변수를 선택하기만 하면 됩니다.
+
+```{r}
+library(bitmodeling)
+
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event)
+```
+
+
+### positive 클래스 정의하기
+
+우리는 무엇을 예측할 것인가요? 관심있는 클래스인 positive 클래스를 선택해야 되죠.
+
+`set_positive()` 함수로 앞에서 정의한 target 변수의 positive 클래스를 선택합니다.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes")   
+```
+
+
+### 데이터셋 분리비율 정하기
+
+이제는 본격적으로 모델링에 들어가기 위해서 훈련 데이터 셋과 평가 데이터 셋을 정의합니다.
+
+`split_dataset()` 함수로 7:3의 비율로 분리하는 레시피를 만듭니다. 이렇게 계속 추가해 나가는 거죠.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7)
+```
+
+
+### 데이터셋 추출하기
+
+7:3의 비율로 분리하는 레시피에서 훈련 데이터셋을 추출합니다.
+
+`extract_dataset()` 함수로 훈련 데이터 셋을 추출합니다. 물론 평가 데이터 셋의 추출도 가능합니다.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset()
+```
+
+
+### target 변수의 불균형도 살펴보기
+
+`target_table()` 함수로 추출한 훈련 데이터 셋에서의 target 변수의 두 클래스의 비율을 살펴봅니다.
+
+positive 클래스인 `Yes`가 minority 클래스이군요. 불균형을 해소하는 레시피를 만들어야 겠다고 잠깐 찜해둡니다.
+
+
+```{r}
+data_recipe %>% 
+  target_table()
+```
+
+`target_table()` 함수는 꼭 데이터를 추출한 후에만 사용할 수 있을까요? 그렇지 않습니다.
+
+target 변수를 선정 후에도 가능합니다.
+
+```{r}
+dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  target_table()  
+```
+
+그리고 데이터셋 분리비율을 정한 다음에도 가능합니다.
+
+```{r}
+dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  target_table()  
+```
+
+심지어는 레시피에 데이터 전처리 스탭이 추갇힌 후에도 가능합니다.
+
+```{r}
+dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() %>% 
+  step_my_rose() %>% 
+  target_table()
+```
+
+
+### 모델 포뮬러 정의하기
+
+target 변수는 정해졌고, 이제는 target 변수 예측에 사용할 변수인 predictors를 선택해야겠죠.
+
+이번에도 `set_formula()` 함수로 간단하게 정의합니다. 기본값을 사용하면 나머지 모든 변수가 predictors로 선택됩니다. 즉, 포뮬러의 기본값은 `death_event ~ .`가 되는 것이죠. 
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() 
+```
+
+`death_event ~ age + diabetes + smoking + sex`과 같은 모델 포뮬러도 가능하겠죠?
+
+
+### 수치변수의 정규화
+
+이제는 본격적인 데이터 전처리에 들어갑니다. 먼저 수치변수에 대해서 정규화를 수행합니다. `step_my_center()` 함수만 추가하면 됩니다.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() %>% 
+  step_my_center()
+```
+
+
+### 범주형변수의 더미화
+
+범주형 변수를 선형 모델에 사용하기 위해서 더미 변수화를 수행합니다. `step_my_dummy()` 함수만 추가하면 됩니다.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() %>% 
+  step_my_center() %>% 
+  step_my_dummy()
+```
+
+
+### target 변수의 불균형 해소
+
+앞서 우리는 `target_table()` 함수로 target 변수의 불균형을 인지했습니다. 그래서 ROSE 기법으로 불균형 문제를 해결하려 합니다. `step_my_rose()` 함수만 추가하면 됩니다.
+
+```{r}
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() %>% 
+  step_my_center() %>% 
+  step_my_dummy() %>% 
+  step_my_rose()
+
+data_recipe %>% 
+  target_table()
+```
+
+이제는 데이터 전처리를 위한 레시피 작업이 어느 정도 완성된 것 같군요.
+
+
+## 대표적인 여러 binary classifiers의 모델링
+
+bitmodeling 패키지는 binary classification을 위한 다음의 binary classifiers를 지원합니다.
+
+- Logistic Regression
+- Lasso Regression
+- Ridge Regression
+- Elastic Net Regression
+- Random Forest
+- XGBoost
+
+이들은 각각 "logistic", "lasso", "elastic", "ridge", "ranger", "xgboost"로 인식됩니다.
+
+
+### 모델 적합하기
+
+`get_training()` 함수에 앞서 만든 레시피만 적용하면 미리 정의된 6개의 binary classifiers 모델 중에서 하나의 binary classifiers 모델을 적합할 수 있습니다.
+
+함수의 기본값으로는 Logistic Regression이 수행됩니다.
+
+```{r}
+# Logistic Regression 모델의 적합
+model_logistic <- get_training(data_recipe)
+```
+
+모델 객체를 출력해봅니다. tidymodels의 레시피 객체와 유사해보입니다.
+
+```{r}
+# 모델 객체의 출력
+model_logistic
+```
+
+이번에는 Ridge Regression을 수행해 봅니다.
+
+```{r}
+# Ridge Regression 모델의 적합
+my_model <- get_training(data_recipe, classifiers = "ridge")
+```
+
+이 함수의 원형은 다음과 같습니다.
+
+```{r, eval=FALSE}
+get_training(
+  x,
+  classifiers = c("logistic", "lasso", "elastic", "ridge", "ranger", "xgboost"),
+  n_fold = 10L,
+  n_grid = 30L,
+  n_best = 10L,
+  n_trees = ifelse(classifiers %in% "ranger", 500L, 500L),
+  best_metric = c("f_meas", "recall", "sensitivity", "precision", "specificity",
+    "accuracy", "bal_accuracy", "detection_prevalence", "f_meas_05", "f_meas_2",
+    "j_index", "kap", "mcc", "npv", "ppv", "gmean"),
+  verbose = TRUE
+)
+```
+
+각각의 인수의 의미는 다음과 같습니다.
+
+- x	
+    - recipe. 모델을 정의한 recipe 객체.
+- classifiers     
+    - character. Binary classification 모델의 classifier. 
+    - "logistic", "lasso", "elastic", "ridge", "ranger", "xgboost"에서 선택.
+- n_fold	
+    - integer. Cross-Validation을 수행한 n-Folds의 값. 기본값은 10.
+- n_grid	
+    - integer. Hyper Parameters를 수행할 Grid의 개수. 기본값은 30.
+- n_best	
+    - integer. Best 모델의 목록을 계산할 목록의 개수. 기본값은 10.
+- n_trees	
+    - integer. model이 "ranger"나 "xgboost"일 경우에만 사용하는 인수. 모델에서 생성할 개별 트리의 개수를 지정함.      - 기본값은 "ranger"는 500개, "xgboost"는 500개임.
+- best_metric	
+    - character. Best 모델을 선정할 때 사용하는 성능지표. 
+        - "f_meas", "recall", "sensitivity", "precision", "specificity", "accuracy", "bal_accuracy",
+        - "detection_prevalence", "f_meas_05", "f_meas_2", "j_index", "kap", "mcc", "npv", "ppv", 
+        - "gmean"중에서 선택함.       
+    - 기본값은 "f_meas"
+- verbose	
+    - logical. 작업 경과의 정보를 출력할지의 여부, 기본값은 TRUE.
+
+
+### 모델의 성능 평가하기
+
+적합한 binary classifiers 모델의 성능평가를 수행해 봅니다.
+
+#### 모델의 계수 살펴보기
+
+모델을 평가하기에 앞서서 어떤 변수들이 모델에서 target 변수에서 positive를 예측하는데 기여하는지 알고 싶을겁니다.  
+다음처럼 `info_model()` 함수가 계수를 추출해줍니다.
+
+```{r}
+info_model(my_model, "coef")
+```
+
+좀더 직관적인 관찰을 위해서 시각화를 수행합니다. `info_model()` 함수를 `viz_model()` 함수로 바꾸기만 하면 됩니다.
+
+```{r, out.width="65%", fig.width=6, fig.height=5, dpi=250}
+viz_model(my_model, "coef")
+```
+
+
+#### Confusion Matrix 구하기
+
+Confusion Matrix도 `info_model()` 함수로 구합니다.
+
+```{r}
+info_model(my_model, "cmat")
+```
+
+Confusion Matrix도 시각화할 수 있습니다. 물론 `viz_model()` 함수를 사용합니다.
+
+Confusion Matrix 결과를 heatmap 플롯으로 시각화하기 위해서는 "heatmap" 인수를 사용합니다.
+
+```{r, out.width="65%", fig.width=5, fig.height=5, dpi=250}
+viz_model(my_model, "heatmap")
+```
+
+Confusion Matrix 결과를 mosaic 플롯으로 시각화하기 위해서는 "mosaic" 인수를 사용합니다.
+
+```{r, out.width="65%", fig.width=5, fig.height=5, dpi=250}
+viz_model(my_model, "mosaic")
+```
+
+
+#### 성능 평가지표 계산하기
+
+성능 평가지표도 `info_model()` 함수로 구합니다. 17개의 성능 평가지표가 구해집니다. 변수의 이름이 `.estimate`로 나타난 것으로 우리는 이 모델의 성능지표는 검증 데이터셋이 아니라 Cross Validation을 통해서 만들어졌다는 것을 알 수 있습니다.
+
+```{r}
+info_model(my_model, "metrics") %>% 
+  print(n = 20)
+```
+
+그리고 `viz_model()` 함수로는 ROC 커브를 그릴 수 있습니다.
+
+```{r, out.width="65%", fig.width=5, fig.height=5, dpi=250}
+viz_model(my_model, "roc")
+```
+
+"density" 인수를 적용하면 예측 확률의 구간별 target 클래스별 분포를 시각화할 수도 있습니다.
+
+```{r, out.width="65%", fig.width=7, fig.height=5, dpi=250}
+viz_model(my_model, "density")
+```
+
+
+#### 확률 구간별 positive 예측 확률 구하기
+
+target 변수의 positive 예측 확률을 quantiles 구간으로 비닝한 후 개별 빈의 분포를 살표볼 수 있습니다.
+
+`info_model()` 함수의 인수에 단지 "quantiles"만 기술하면 됩니다.
+
+```{r, eval=FALSE}
+info_model(my_model, "quantiles")
+```
+
+```{r, echo=FALSE}
+info_model(my_model, "quantiles") %>% 
+  print(n = 10)
+```
+
+`nbins` 인수를 사용하면 빈의 개수를 지정할 수도 있습니다.
+
+```{r, eval=FALSE}
+info_model(my_model, "quantiles", nbins = 7)
+```
+
+
+```{r, echo=FALSE}
+info_model(my_model, "quantiles", nbins = 7)
+```
+
+좀더 쉽게 파악하고 싶다구요? 시각화를 해 보세요!
+
+`viz_model()` 함수의 인수에 단지 "bin"만 기술하면 됩니다.
+
+```{r, out.width="65%", fig.width=8, fig.height=5, dpi=250}
+viz_model(my_model, "bin")
+```
+
+`nbins` 인수를 사용하면 빈의 개수를 지정할 수도 있습니다.
+
+```{r, out.width="65%", fig.width=8, fig.height=5, dpi=250}
+viz_model(my_model, "bin", nbins = 7)
+```
+
+
+## 여러 binary classifiers를 적용한 모델링
+
+bitmodeling에서 제공하는 binary classifiers 여러 개를 한번에 적합할 수 있습니다.
+
+### 복수 binary classifiers 적합하기
+
+`multi_classifiers()` 함수가 여러 개의 binary classifiers 여러개를 한번에 적합하도록 도와줍니다. 사용 방법은 `get_training()` 함수와 유사합니다.
+
+여기서는 Ridge Regression과 Random Forest classifiers를 적합합니다. 만약에 classifiers 6종 모두 적합하려면 `classifiers` 인수를 지정하지 않으면 됩니다.
+
+```{r}
+my_models <- multi_classifiers(data_recipe, classifiers = c("ridge", "ranger"))
+```
+
+
+###  모델의 성능 평가
+
+#### 통계량 보기
+
+`compare_info_model()` 함수로 성능평가를 위한 정보를 추출할 수 있습니다. `info_model()`과 사용법이 거의 유사하므로 여기서는 간단하게 성능지표만 추출해 봅니다.
+
+```{r}
+compare_info_model(my_models, "metrics")
+```
+
+`merge` 인수를 TRUE로 지정하면, 복수개의 모델을 하나의 데이터로 병합해 줍니다.
+
+```{r}
+compare_info_model(my_models, "metrics", merge = TRUE)
+```
+
+각 성능 지표별로 어떤 classifiers가 우수한가를 보기위해서는 다음처럼 dplyr 구분을 사용하면 유용합니다. 
+
+```{r}
+compare_info_model(my_models, "metrics", merge = TRUE) %>% 
+  arrange(.metric, desc(.estimate)) %>% 
+  print(n = Inf)
+```
+
+
+#### 시각화 하기
+
+`compare_viz_model()` 함수로 성능평가를 위한 정보를 추출할 수 있습니다. `viz_model()`과 사용법이 거의 유사하므로 여기서는 간단하게 예측 확률의 구간별 target 클래스별 분포 시각화만 수행해 봅니다.
+
+```{r, out.width="65%", fig.width=8, fig.height=5, dpi=250}
+compare_viz_model(my_models, "bin")
+```
+
+
+## 복수개의 레시피에 여러 binary classifiers 적용하기
+
+여러 레시피를 한번에 적합할 필요가 있을 수 있습니다. `multi_recipes()` 함수가 이를 지원합니다.
+
+### 복수 레시피 적합하기
+
+다음은 두개 레시피에 대해서 Ridge Regression과 Random Forest classifiers 모델을 적합합니다.
+
+- 첫번 째 레시피
+    - death_event ~ .
+- 두번 째 레시피
+    - diabetes ~ .    
+
+```{r}
+# 모델 개발을 위한 첫째 recipe 정의
+death_event_recipe <- dlookr::heartfailure %>%
+  target_to(death_event) %>%
+  set_positive("Yes") %>%
+  split_dataset(prop = 0.7) %>%
+  extract_dataset() %>%
+  set_formula() %>%
+  step_my_center() %>%
+  step_my_dummy() %>%
+  step_my_rose()
+  
+# 모델 개발을 위한 둘째 recipe 정의
+diabetes_recipe <- dlookr::heartfailure %>%
+  target_to(diabetes) %>%
+  set_positive("Yes") %>%
+  split_dataset(prop = 0.7) %>%
+  extract_dataset() %>%
+  set_formula() %>%
+  step_my_center() %>%
+  step_my_dummy() %>%
+  step_my_rose()
+
+# recipe를 성분으로 갖는 list 정의
+recipes <- list(death_event_recipe, diabetes_recipe)
+
+my_recipes <- multi_recipes(recipes, classifiers = c("ridge", "ranger"))
+```
+
+
+#### 통계량 보기
+
+`compare_info_model()` 함수로 성능평가를 위한 정보를 추출할 수 있습니다. `info_model()`과 사용법이 거의 유사하므로 여기서는 간단하게 성능지표만 추출해 봅니다.
+
+다만 복수개의 레시피 모델의 결과는 레시피 결과를 성분으로 갖는 리스트 객체로 반환되므로 다음처럼 "[[" 연산자로 레시피 내에서의 classifiers 별로 성능을 비교합니다. 이 예제는 첫째 레시피인 `death_event ~ .` 포뮬러에 대한 통계량입니다.
+
+
+```{r}
+compare_info_model(my_recipes[[1]], "metrics")
+```
+
+#### 시각화 하기
+
+`compare_viz_model()` 함수로 성능평가를 위한 정보를 추출할 수 있습니다. `viz_model()`과 사용법이 거의 유사하므로 여기서는 간단하게 예측 확률의 구간별 target 클래스별 분포 시각화만 수행해 봅니다.
+
+역시 "[[" 연산자로 레시피 내에서의 classifiers 별로 시각화합니다. 이 예제는 첫째 레시피인 `death_event ~ .` 포뮬러에 대한 시각화입니다.
+
+
+```{r, out.width="65%", fig.width=8, fig.height=5, dpi=250}
+compare_viz_model(my_recipes[[1]], "bin")
+```
+
+
+## 모델의 성능평가 보고서 작성
+
+bitmodeling 패키지는 모델의 성능평가 보고서를 자동으로 생성해 줍니다.
+
+모델의 성능 평가 보고서는 다음과 같은 유형으로 생성해 줍니다.
+
+- 단일 classifier 모델 리포트
+- 다중 classifiers 모델 비교 리포트
+- recipe별 모델 비교 리포트
+    - recipe별로 classifiers 모델 비교 리포트 생성
+    
+### 단일 classifier 모델 리포트    
+
+단일 classifier 모델에 대한 성능평가 보고서는 `report_model()`을 이용해서 생성합니다.
+
+```{r, eval=FALSE}
+# 모델 개발을 위한 recipe 정의
+data_recipe <- dlookr::heartfailure %>% 
+  target_to(death_event) %>% 
+  set_positive("Yes") %>% 
+  split_dataset(prop = 0.7) %>% 
+  extract_dataset() %>% 
+  set_formula() %>% 
+  step_my_center() %>% 
+  step_my_dummy() %>% 
+  step_my_rose()
+
+# logistic regrssion 적합     
+my_model <- get_training(data_recipe)
+
+# logistic regrssion 성능평가 보고서 출력
+report_model(my_model)
+```
+
+
+
+### 다중 classifiers 모델 비교 리포트    
+
+다중 classifier 모델에 대한 성능평가 보고서도 `report_model()`을 이용해서 생성합니다.
+
+```{r, eval=FALSE}
+# 복수개의 classifiers별로 적합
+# "logistic", "lasso", "elastic", "ridge", "ranger", "xgboost" classifiers를 순차 모델링
+my_models <- multi_classifiers(data_recipe)
+
+# classifiers별로 성능을 비교할 수 있는 성능평가 보고서 출력
+report_model(my_models, output_file = "compare_model_performance.xlsx")
+```
+
+    
+### recipe별 모델 비교 리포트  
+
+다중 recipe별 모델에 대한 성능평가 보고서는 `report_model_recipes()`를 이용해서 생성합니다.
+
+다음 예제는 두 개의 recipe에 대한 성능비교를 위한 두 개의 파일을 생성합니다.
+
+```{r, eval=FALSE}
+# 모델 개발을 위한 첫째 recipe 정의
+death_event_recipe <- dlookr::heartfailure %>%
+  target_to(death_event) %>%
+  set_positive("Yes") %>%
+  split_dataset(prop = 0.7) %>%
+  extract_dataset() %>%
+  set_formula() %>%
+  step_my_center() %>%
+  step_my_dummy() %>%
+  step_my_rose()
+  
+# 모델 개발을 위한 둘째 recipe 정의
+diabetes_recipe <- dlookr::heartfailure %>%
+  target_to(diabetes) %>%
+  set_positive("Yes") %>%
+  split_dataset(prop = 0.7) %>%
+  extract_dataset() %>%
+  set_formula() %>%
+  step_my_center() %>%
+  step_my_dummy() %>%
+  step_my_rose()
+
+# recipe를 성분으로 갖는 list 정의
+recipes <- list(death_event_recipe, diabetes_recipe)
+
+my_recipes <- multi_recipes(recipes)
+
+# recipes별로 classifiers의 성능을 비교할 수 있는 성능평가 보고서 출력
+report_model_recipes(my_recipes)
+
+# 생성된 파일의 이름들
+list.files(path = getwd(), pattern = "model_performance")
+```
+
