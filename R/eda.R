@@ -1121,7 +1121,8 @@ eda_numeric <- function(x, target_variable, positive = "1", output_file = NULL,
                 rename({{predictor_variable}} := predictor)
             ) %>% 
             group_by_at(vars(matches(predictor_variable))) %>% 
-            mutate(pct = round(n / sum(n) * 100, 2)) %>% 
+            #mutate(pct = round(n / sum(n) * 100, 2)) %>% 
+            mutate(pct = ifelse(n == 0, 0, round(n / sum(n) * 100, 2))) %>% 
             tidyr::pivot_wider(-n, names_from = 2, values_from = "pct") 
           
           subtitle_str <- "<< 분할표 - 상대도수 >>"
@@ -1286,15 +1287,15 @@ eda_numeric <- function(x, target_variable, positive = "1", output_file = NULL,
           writeDataTable(wb, sheet = sheet_name, tab_opt, startCol = 1, 
                          startRow = row_opt + 2, rowNames = FALSE)
           
-          conditionalFormatting(wb, sheet = sheet_name, cols = 2, 
-                                rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
-                                type = "databar") 
-          conditionalFormatting(wb, sheet = sheet_name, cols = 7, 
-                                rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
-                                type = "databar")       
-          conditionalFormatting(wb, sheet = sheet_name, cols = 11, 
-                                rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
-                                type = "databar", style = "#FFA500")       
+          # conditionalFormatting(wb, sheet = sheet_name, cols = 2, 
+          #                       rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
+          #                       type = "databar") 
+          # conditionalFormatting(wb, sheet = sheet_name, cols = 7, 
+          #                       rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
+          #                       type = "databar")       
+          # conditionalFormatting(wb, sheet = sheet_name, cols = 11, 
+          #                       rows = (row_opt + 3):(row_opt + 1 + NROW(tab_opt)), 
+          #                       type = "databar", style = "#FFA500")       
           
           s <- createStyle(numFmt = "#,##0")
           addStyle(wb, sheet = sheet_name, style = s, 
