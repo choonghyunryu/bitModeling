@@ -1,4 +1,14 @@
-# bitmodeling 0.3.1.9001
+# bitmodeling 0.3.2.9001
+
+## BUG FIXES
+
+* eda_numeric 도움말 오류 수정. (#01).
+  - eda_numeric()
+
+  
+  
+  
+# bitmodeling 0.3.1.
 
 ## NEW FEATURES
 
