@@ -66,7 +66,7 @@ eda_category <- function(x, target_variable, positive = "1", output_file = NULL,
   path <- output_dir
   
   if (is.null(output_file))
-    output_file <- glue::glue("01_EDA_{target_variable}_범주형.xlsx")
+    output_file <- glue::glue("EDA_{target_variable}_categorical.xlsx")
   output_file <- paste(path, output_file, sep = "/")
   
   
@@ -496,7 +496,7 @@ eda_numeric <- function(x, target_variable, positive = "1", output_file = NULL,
   path <- output_dir
   
   if (is.null(output_file))
-    output_file <- glue::glue("01_EDA_{target_variable}_연속형.xlsx")
+    output_file <- glue::glue("EDA_{target_variable}_numerical.xlsx")
   output_file <- paste(path, output_file, sep = "/")
   
   
